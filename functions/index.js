@@ -21,7 +21,19 @@ const PLANETS = {
   Rahu: ["SE_MEAN_NODE", "MEAN_NODE"],
 };
 
-const getSwissEph = () => SwissEphModule.default ?? SwissEphModule;
+const getSwissEph = () => {
+  const module = SwissEphModule.default ?? SwissEphModule;
+  if (typeof module === "function") {
+    return module();
+  }
+  if (typeof module?.createSwissEph === "function") {
+    return module.createSwissEph();
+  }
+  if (typeof module?.SwissEph === "function") {
+    return new module.SwissEph();
+  }
+  return module;
+};
 
 const getConst = (swe, names) => {
   for (const name of names) {
@@ -141,7 +153,12 @@ const resolveCalcFlags = (swe) => {
 };
 
 const setSiderealMode = (swe) => {
-  const setMode = swe.set_sid_mode ?? swe.setSidMode ?? swe.setSiderealMode;
+  const setMode =
+    swe.set_sid_mode ??
+    swe.setSidMode ??
+    swe.setSiderealMode ??
+    swe.swe_set_sid_mode ??
+    swe.sweSetSidMode;
   if (typeof setMode !== "function") {
     throw new Error("SwissEph sidereal mode setter not available");
   }
