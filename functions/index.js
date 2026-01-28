@@ -1,72 +1,117 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+const { setGlobalOptions } = require("firebase-functions");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const Astronomy = require("astronomy-engine");
 
-const {setGlobalOptions} = require("firebase-functions");
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
+setGlobalOptions({ maxInstances: 10 });
 
-// For cost control, you can set the maximum number of containers.
-// Fixed spacing: removed internal spaces to satisfy object-curly-spacing
-setGlobalOptions({maxInstances: 10});
+/** VEDIC LOGIC HELPERS */
+const normalizeDegrees = (d) => ((d % 360) + 360) % 360;
+const getSign = (d) => Math.floor(normalizeDegrees(d) / 30) + 1;
+const getDegInSign = (d) => normalizeDegrees(d) % 30;
 
-const requiredFields = ["dob", "time", "lat", "lng", "timezone"];
+const getAyanamsha = (year) => {
+    return 23.85 + (year - 2000) * (50.27 / 3600);
+};
 
-const buildMockChart = () => ({
-  status: "success",
-  metadata: {
-    ascendant_sign: 6,
-    ascendant_degrees: 172.45,
-  },
-  charts: {
-    D1: {
-      Sun: {sign: 2, house: 9, isRetrograde: false},
-      Moon: {sign: 8, house: 3, isRetrograde: false},
-      Mars: {sign: 5, house: 12, isRetrograde: true},
-      Mercury: {sign: 3, house: 10, isRetrograde: false},
-      Jupiter: {sign: 9, house: 4, isRetrograde: false},
-      Venus: {sign: 7, house: 2, isRetrograde: false},
-      Saturn: {sign: 11, house: 6, isRetrograde: true},
-      Rahu: {sign: 1, house: 7, isRetrograde: true},
-      Ketu: {sign: 7, house: 1, isRetrograde: true},
-    },
-    D9: {
-      Sun: {sign: 4, house: 11},
-      Moon: {sign: 11, house: 6},
-      Mars: {sign: 1, house: 8},
-      Mercury: {sign: 9, house: 2},
-      Jupiter: {sign: 6, house: 4},
-      Venus: {sign: 2, house: 10},
-      Saturn: {sign: 12, house: 5},
-      Rahu: {sign: 5, house: 1},
-      Ketu: {sign: 11, house: 7},
-    },
-    D10: {
-      Sun: {sign: 10, house: 5},
-      Moon: {sign: 5, house: 12},
-      Mars: {sign: 8, house: 3},
-      Mercury: {sign: 6, house: 9},
-      Jupiter: {sign: 2, house: 1},
-      Venus: {sign: 7, house: 4},
-      Saturn: {sign: 9, house: 8},
-      Rahu: {sign: 3, house: 6},
-      Ketu: {sign: 9, house: 12},
-    },
-  },
-});
+// Standard Mean Node formula (Meeus/Moshier) - Very stable
+const getMeanRahu = (astroTime) => {
+    const T = astroTime.tt / 36525.0; // Centuries from J2000
+    // Formula for Mean Ascending Node of the Moon
+    let omega = 125.0445222 - (1934.1362608 * T) + (0.0020708 * T * T) + (T * T * T / 450000);
+    return normalizeDegrees(omega);
+};
 
-exports.getBirthChart = onCall({cors: true}, (request) => {
-  const missingFields = requiredFields.filter(
-      (field) => request.data?.[field] === undefined,
-  );
+const getNavamshaSign = (sign, deg) => {
+    const div = Math.floor(deg / (30 / 9));
+    let start = 1;
+    if ([2, 5, 8, 11].includes(sign)) start = 10;
+    else if ([3, 6, 9, 12].includes(sign)) start = 7;
+    return ((start - 1 + div) % 12) + 1;
+};
 
-  if (missingFields.length) {
-    throw new HttpsError(
-        "invalid-argument",
-        `Missing required fields: ${missingFields.join(", ")}`,
-    );
-  }
+const getDashamshaSign = (sign, deg) => {
+    const div = Math.floor(deg / 3);
+    const start = (sign % 2 === 1) ? sign : ((sign + 8) % 12) + 1;
+    return ((start - 1 + div) % 12) + 1;
+};
 
-  return buildMockChart();
+exports.getBirthChart = onCall({ cors: true }, (request) => {
+    const data = request.data;
+    
+    try {
+        if (!data.dob || !data.time) throw new Error("Missing birth details");
+        
+        const [y, m, d] = data.dob.split("-").map(Number);
+        const [hh, mm] = data.time.split(":").map(Number);
+        const jsDate = new Date(Date.UTC(y, m - 1, d, hh, mm));
+
+        const astroTime = Astronomy.MakeTime(jsDate);
+        const ayanamsha = getAyanamsha(y);
+        const lng = parseFloat(data.lng || 0);
+
+        // 1. Calculate Sidereal Ascendant
+        const lst = Astronomy.SiderealTime(astroTime);
+        const tropicalAsc = normalizeDegrees(lst * 15 + lng);
+        const siderealAsc = normalizeDegrees(tropicalAsc - ayanamsha);
+        const ascSign = getSign(siderealAsc);
+
+        const charts = { D1: {}, D9: {}, D10: {} };
+
+        // 2. Main Planets
+        const planetConfigs = [
+            { name: "Sun", body: Astronomy.Body.Sun },
+            { name: "Moon", body: Astronomy.Body.Moon },
+            { name: "Mercury", body: Astronomy.Body.Mercury },
+            { name: "Venus", body: Astronomy.Body.Venus },
+            { name: "Mars", body: Astronomy.Body.Mars },
+            { name: "Jupiter", body: Astronomy.Body.Jupiter },
+            { name: "Saturn", body: Astronomy.Body.Saturn }
+        ];
+
+        planetConfigs.forEach(p => {
+            let lon;
+            if (p.name === "Sun") {
+                lon = Astronomy.SunPosition(astroTime).elon;
+            } else {
+                lon = Astronomy.EclipticLongitude(p.body, astroTime);
+            }
+
+            const sLong = normalizeDegrees(lon - ayanamsha);
+            const sign = getSign(sLong);
+            const deg = getDegInSign(sLong);
+            const house = ((sign - ascSign + 12) % 12) + 1;
+
+            charts.D1[p.name] = { sign, house, degrees: deg };
+            charts.D9[p.name] = { sign: getNavamshaSign(sign, deg) };
+            charts.D10[p.name] = { sign: getDashamshaSign(sign, deg) };
+        });
+
+        // 3. Rahu & Ketu (Calculated via Mean Node Formula)
+        const rahuTropical = getMeanRahu(astroTime);
+        const rahuSidereal = normalizeDegrees(rahuTropical - ayanamsha);
+        const ketuSidereal = normalizeDegrees(rahuSidereal + 180);
+
+        const rSign = getSign(rahuSidereal);
+        const kSign = getSign(ketuSidereal);
+
+        charts.D1.Rahu = { sign: rSign, house: ((rSign - ascSign + 12) % 12) + 1, degrees: getDegInSign(rahuSidereal) };
+        charts.D1.Ketu = { sign: kSign, house: ((kSign - ascSign + 12) % 12) + 1, degrees: getDegInSign(ketuSidereal) };
+        
+        charts.D9.Rahu = { sign: getNavamshaSign(rSign, getDegInSign(rahuSidereal)) };
+        charts.D9.Ketu = { sign: getNavamshaSign(kSign, getDegInSign(ketuSidereal)) };
+
+        return {
+            status: "success",
+            metadata: {
+                ascendant_sign: ascSign,
+                ascendant_degrees: siderealAsc,
+                ayanamsha_used: ayanamsha
+            },
+            charts
+        };
+
+    } catch (err) {
+        console.error("Astro Engine Error:", err);
+        throw new HttpsError("internal", `Calculation failed: ${err.message}`);
+    }
 });
