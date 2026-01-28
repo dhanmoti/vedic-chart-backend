@@ -2,6 +2,9 @@
  * Licensed under the GNU AGPL v3.
  */
 
+import {createRequire} from "node:module";
+import {readdirSync, readFileSync} from "node:fs";
+import {dirname, join} from "node:path";
 import * as SwissEphModule from "@fusionstrings/swiss-eph";
 import {setGlobalOptions} from "firebase-functions";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
@@ -24,24 +27,97 @@ const PLANETS = {
 const resolveMaybePromise = async (value) =>
   value && typeof value.then === "function" ? value : Promise.resolve(value);
 
+const require = createRequire(import.meta.url);
+
+const resolveSwissEphModuleDir = () => {
+  try {
+    return dirname(require.resolve("@fusionstrings/swiss-eph"));
+  } catch (error) {
+    return null;
+  }
+};
+
+const resolveSwissEphInitOptions = () => {
+  const moduleDir = resolveSwissEphModuleDir();
+  if (!moduleDir) {
+    return null;
+  }
+
+  const wasmFile = readdirSync(moduleDir).find((file) => file.endsWith(".wasm"));
+  if (!wasmFile) {
+    return null;
+  }
+
+  const wasmPath = join(moduleDir, wasmFile);
+  return {
+    locateFile: (file) => join(moduleDir, file),
+    wasmBinary: readFileSync(wasmPath),
+  };
+};
+
+const resolveSwissEphDataPath = () => {
+  const moduleDir = resolveSwissEphModuleDir();
+  if (!moduleDir) {
+    return null;
+  }
+
+  const candidates = [moduleDir, join(moduleDir, "ephe"), join(moduleDir, "data")];
+  for (const candidate of candidates) {
+    try {
+      const entries = readdirSync(candidate);
+      if (entries.some((file) => /\.(se1|se2|sepl|seas)$/i.test(file))) {
+        return candidate;
+      }
+    } catch (error) {
+      continue;
+    }
+  }
+
+  return null;
+};
+
 const getSwissEph = async () => {
   const module = SwissEphModule.default ?? SwissEphModule;
+  const initOptions = resolveSwissEphInitOptions();
   if (typeof module === "function") {
-    return resolveMaybePromise(module());
+    return resolveMaybePromise(module(initOptions ?? undefined));
   }
   if (typeof module?.createSwissEph === "function") {
-    return resolveMaybePromise(module.createSwissEph());
+    return resolveMaybePromise(module.createSwissEph(initOptions ?? undefined));
   }
   if (typeof module?.SwissEph === "function") {
     return new module.SwissEph();
   }
   if (typeof module?.init === "function") {
-    return resolveMaybePromise(module.init());
+    return resolveMaybePromise(module.init(initOptions ?? undefined));
   }
   if (typeof module?.initialize === "function") {
-    return resolveMaybePromise(module.initialize());
+    return resolveMaybePromise(module.initialize(initOptions ?? undefined));
   }
   return module;
+};
+
+const ensureSwissEphReady = async (swe) => {
+  if (swe?.ready && typeof swe.ready.then === "function") {
+    await swe.ready;
+  }
+  return swe;
+};
+
+const configureSwissEphPaths = (swe) => {
+  const setEphePath =
+    swe.set_ephe_path ??
+    swe.setEphePath ??
+    swe.swe_set_ephe_path ??
+    swe.sweSetEphePath;
+  if (typeof setEphePath !== "function") {
+    return;
+  }
+
+  const ephePath = resolveSwissEphDataPath();
+  if (ephePath) {
+    setEphePath.call(swe, ephePath);
+  }
 };
 
 const getConst = (swe, names) => {
@@ -234,7 +310,8 @@ const calcAscendantLongitude = (swe, julianDayUt, lat, lng) => {
 };
 
 const calculateCharts = async ({dob, time, lat, lng, timezone}) => {
-  const swe = await getSwissEph();
+  const swe = await ensureSwissEphReady(await getSwissEph());
+  configureSwissEphPaths(swe);
   setSiderealMode(swe);
 
   const dateParts = parseDateTime(dob, time);
