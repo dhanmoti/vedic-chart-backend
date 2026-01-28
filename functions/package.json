@@ -1,6 +1,7 @@
 {
   "name": "functions",
   "description": "Cloud Functions for Firebase",
+  "type": "module",
   "scripts": {
     "lint": "eslint .",
     "serve": "firebase emulators:start --only functions",
@@ -10,10 +11,11 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "24"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
+    "@fusionstrings/swiss-eph": "^0.1.0",
     "firebase-admin": "^13.6.0",
     "firebase-functions": "^7.0.0"
   },
