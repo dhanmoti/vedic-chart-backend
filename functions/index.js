@@ -368,6 +368,158 @@ const ephemerisCache = {
 const normalizeDegrees = (d) => ((d % 360) + 360) % 360;
 const getSign = (d) => Math.floor(normalizeDegrees(d) / 30) + 1;
 const getDegInSign = (d) => normalizeDegrees(d) % 30;
+const SIGN_NAMES = [
+    "Aries",
+    "Taurus",
+    "Gemini",
+    "Cancer",
+    "Leo",
+    "Virgo",
+    "Libra",
+    "Scorpio",
+    "Sagittarius",
+    "Capricorn",
+    "Aquarius",
+    "Pisces"
+];
+const NAKSHATRA_NAMES = [
+    "Ashwini",
+    "Bharani",
+    "Krittika",
+    "Rohini",
+    "Mrigashirsha",
+    "Ardra",
+    "Punarvasu",
+    "Pushya",
+    "Ashlesha",
+    "Magha",
+    "Purva Phalguni",
+    "Uttara Phalguni",
+    "Hasta",
+    "Chitra",
+    "Swati",
+    "Vishakha",
+    "Anuradha",
+    "Jyeshtha",
+    "Mula",
+    "Purva Ashadha",
+    "Uttara Ashadha",
+    "Shravana",
+    "Dhanishta",
+    "Shatabhisha",
+    "Purva Bhadrapada",
+    "Uttara Bhadrapada",
+    "Revati"
+];
+const DASA_LORDS = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"];
+const DASA_YEARS = {
+    Ketu: 7,
+    Venus: 20,
+    Sun: 6,
+    Moon: 10,
+    Mars: 7,
+    Rahu: 18,
+    Jupiter: 16,
+    Saturn: 19,
+    Mercury: 17
+};
+const TITHI_NAMES = [
+    "Pratipada",
+    "Dwitiya",
+    "Tritiya",
+    "Chaturthi",
+    "Panchami",
+    "Shashthi",
+    "Saptami",
+    "Ashtami",
+    "Navami",
+    "Dashami",
+    "Ekadashi",
+    "Dwadashi",
+    "Trayodashi",
+    "Chaturdashi",
+    "Purnima"
+];
+const AVAKHADA_MAP = [
+    { varna: "Kshatriya", vashya: "Chatushpada", yoni: "Ashwa", gana: "Deva", nadi: "Adi", tatwa: "Vayu" },
+    { varna: "Shudra", vashya: "Chatushpada", yoni: "Gaja", gana: "Manushya", nadi: "Madhya", tatwa: "Prithvi" },
+    { varna: "Brahmin", vashya: "Chatushpada", yoni: "Mesh", gana: "Rakshasa", nadi: "Antya", tatwa: "Agni" },
+    { varna: "Vaishya", vashya: "Chatushpada", yoni: "Sarpa", gana: "Manushya", nadi: "Adi", tatwa: "Prithvi" },
+    { varna: "Shudra", vashya: "Chatushpada", yoni: "Sarpa", gana: "Deva", nadi: "Madhya", tatwa: "Prithvi" },
+    { varna: "Vaishya", vashya: "Manava", yoni: "Shwan", gana: "Manushya", nadi: "Antya", tatwa: "Vayu" },
+    { varna: "Kshatriya", vashya: "Manava", yoni: "Marjara", gana: "Deva", nadi: "Adi", tatwa: "Vayu" },
+    { varna: "Kshatriya", vashya: "Manava", yoni: "Mesh", gana: "Deva", nadi: "Madhya", tatwa: "Jala" },
+    { varna: "Brahmin", vashya: "Jalachara", yoni: "Marjara", gana: "Rakshasa", nadi: "Antya", tatwa: "Jala" },
+    { varna: "Shudra", vashya: "Manava", yoni: "Mushaka", gana: "Rakshasa", nadi: "Adi", tatwa: "Agni" },
+    { varna: "Brahmin", vashya: "Manava", yoni: "Mushaka", gana: "Manushya", nadi: "Madhya", tatwa: "Agni" },
+    { varna: "Kshatriya", vashya: "Manava", yoni: "Gau", gana: "Manushya", nadi: "Antya", tatwa: "Agni" },
+    { varna: "Brahmin", vashya: "Manava", yoni: "Mahisha", gana: "Deva", nadi: "Adi", tatwa: "Jala" },
+    { varna: "Shudra", vashya: "Vanachara", yoni: "Vyaghra", gana: "Rakshasa", nadi: "Madhya", tatwa: "Agni" },
+    { varna: "Brahmin", vashya: "Vanachara", yoni: "Mahisha", gana: "Deva", nadi: "Antya", tatwa: "Vayu" },
+    { varna: "Brahmin", vashya: "Manava", yoni: "Vyaghra", gana: "Rakshasa", nadi: "Adi", tatwa: "Agni" },
+    { varna: "Shudra", vashya: "Manava", yoni: "Mriga", gana: "Deva", nadi: "Madhya", tatwa: "Jala" },
+    { varna: "Shudra", vashya: "Manava", yoni: "Mriga", gana: "Rakshasa", nadi: "Antya", tatwa: "Jala" },
+    { varna: "Brahmin", vashya: "Vanachara", yoni: "Shwan", gana: "Rakshasa", nadi: "Adi", tatwa: "Vayu" },
+    { varna: "Kshatriya", vashya: "Vanachara", yoni: "Vanara", gana: "Manushya", nadi: "Madhya", tatwa: "Vayu" },
+    { varna: "Kshatriya", vashya: "Vanachara", yoni: "Nakula", gana: "Manushya", nadi: "Antya", tatwa: "Vayu" },
+    { varna: "Shudra", vashya: "Vanachara", yoni: "Vanara", gana: "Deva", nadi: "Adi", tatwa: "Jala" },
+    { varna: "Shudra", vashya: "Rakshasa", yoni: "Simha", gana: "Rakshasa", nadi: "Madhya", tatwa: "Agni" },
+    { varna: "Brahmin", vashya: "Rakshasa", yoni: "Ashwa", gana: "Rakshasa", nadi: "Antya", tatwa: "Akasha" },
+    { varna: "Brahmin", vashya: "Manava", yoni: "Simha", gana: "Manushya", nadi: "Adi", tatwa: "Akasha" },
+    { varna: "Kshatriya", vashya: "Manava", yoni: "Gau", gana: "Manushya", nadi: "Madhya", tatwa: "Akasha" },
+    { varna: "Vaishya", vashya: "Manava", yoni: "Gau", gana: "Deva", nadi: "Antya", tatwa: "Jala" }
+];
+const DIGNITY_TABLE = {
+    Sun: {
+        own: [5],
+        exaltation: 1,
+        debilitation: 7,
+        friends: [1, 4, 9],
+        enemies: [2, 10, 11, 6]
+    },
+    Moon: {
+        own: [4],
+        exaltation: 2,
+        debilitation: 8,
+        friends: [1, 4, 5],
+        enemies: [9, 10, 11]
+    },
+    Mars: {
+        own: [1, 8],
+        exaltation: 10,
+        debilitation: 4,
+        friends: [1, 4, 5],
+        enemies: [2, 6]
+    },
+    Mercury: {
+        own: [3, 6],
+        exaltation: 6,
+        debilitation: 12,
+        friends: [3, 6, 7],
+        enemies: [5, 9]
+    },
+    Jupiter: {
+        own: [9, 12],
+        exaltation: 4,
+        debilitation: 10,
+        friends: [1, 4, 5],
+        enemies: [2, 6, 7]
+    },
+    Venus: {
+        own: [2, 7],
+        exaltation: 12,
+        debilitation: 6,
+        friends: [2, 7, 10],
+        enemies: [5, 9]
+    },
+    Saturn: {
+        own: [10, 11],
+        exaltation: 7,
+        debilitation: 1,
+        friends: [2, 6, 7],
+        enemies: [1, 4, 5]
+    }
+};
 
 const toJulianDay = (date) => {
     const year = date.getUTCFullYear();
@@ -467,6 +619,123 @@ const getDashamshaSign = (sign, deg) => {
     return ((start - 1 + div) % 12) + 1;
 };
 
+const getNakshatraDetails = (siderealLongitude) => {
+    const normalized = normalizeDegrees(siderealLongitude);
+    const nakshatraSpan = 13 + 20 / 60;
+    const padaSpan = 3 + 20 / 60;
+    const index = Math.floor(normalized / nakshatraSpan);
+    const withinNakshatra = normalized - index * nakshatraSpan;
+    const pada = Math.floor(withinNakshatra / padaSpan) + 1;
+    const degreesIntoNakshatra = withinNakshatra;
+    return {
+        index,
+        name: NAKSHATRA_NAMES[index],
+        pada,
+        degreesIntoNakshatra
+    };
+};
+
+const formatDms = (deg) => {
+    const totalSeconds = Math.round(deg * 3600);
+    const degrees = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${degrees}°${minutes.toString().padStart(2, "0")}'${seconds.toString().padStart(2, "0")}"`;
+};
+
+const getTithi = (moonLongitude, sunLongitude) => {
+    const diff = normalizeDegrees(moonLongitude - sunLongitude);
+    const tithiIndex = Math.floor(diff / 12);
+    const phase = diff < 180 ? "Shukla" : "Krishna";
+    const name = TITHI_NAMES[tithiIndex % 15];
+    return `${phase} ${name}`;
+};
+
+const getVikramSamvatYear = (date) => date.getUTCFullYear() + 57;
+
+const getPlanetStatus = (planet, sign) => {
+    const dignity = DIGNITY_TABLE[planet];
+    if (!dignity) return "Friend";
+    if (dignity.debilitation === sign) return "Debil.";
+    if (dignity.exaltation === sign) return "Great Friend";
+    if (dignity.own.includes(sign)) return "Own";
+    if (dignity.enemies.includes(sign)) return "Enemy";
+    return "Friend";
+};
+
+const buildVimshottariDasha = (moonLongitude) => {
+    const nakshatra = getNakshatraDetails(moonLongitude);
+    const lordIndex = nakshatra.index % DASA_LORDS.length;
+    const mahaLord = DASA_LORDS[lordIndex];
+    const nakshatraSpan = 13 + 20 / 60;
+    const progress = nakshatra.degreesIntoNakshatra / nakshatraSpan;
+    const mahaDuration = DASA_YEARS[mahaLord];
+    const elapsedYears = mahaDuration * progress;
+    const balanceYears = mahaDuration - elapsedYears;
+
+    const antarSequence = [];
+    for (let i = 0; i < DASA_LORDS.length; i += 1) {
+        antarSequence.push(DASA_LORDS[(lordIndex + i) % DASA_LORDS.length]);
+    }
+
+    let remainingElapsed = elapsedYears;
+    let antarLord = antarSequence[0];
+    let antarDuration = 0;
+    for (let i = 0; i < antarSequence.length; i += 1) {
+        const lord = antarSequence[i];
+        const duration = (mahaDuration * DASA_YEARS[lord]) / 120;
+        if (remainingElapsed <= duration + 1e-6) {
+            antarLord = lord;
+            antarDuration = duration;
+            break;
+        }
+        remainingElapsed -= duration;
+    }
+
+    const pratyantarSequence = [];
+    const antarIndex = DASA_LORDS.indexOf(antarLord);
+    for (let i = 0; i < DASA_LORDS.length; i += 1) {
+        pratyantarSequence.push(DASA_LORDS[(antarIndex + i) % DASA_LORDS.length]);
+    }
+    let pratyantarLord = pratyantarSequence[0];
+    let remainingAntarElapsed = remainingElapsed;
+    for (let i = 0; i < pratyantarSequence.length; i += 1) {
+        const lord = pratyantarSequence[i];
+        const duration = (antarDuration * DASA_YEARS[lord]) / 120;
+        if (remainingAntarElapsed <= duration + 1e-6) {
+            pratyantarLord = lord;
+            break;
+        }
+        remainingAntarElapsed -= duration;
+    }
+
+    const totalDays = Math.round(balanceYears * 360);
+    const years = Math.floor(totalDays / 360);
+    const months = Math.floor((totalDays % 360) / 30);
+    const days = totalDays % 30;
+
+    return {
+        current: `${mahaLord}-${antarLord}-${pratyantarLord}`,
+        balance: { years, months, days }
+    };
+};
+
+const buildSripatiBhava = (ascendantLongitude) => {
+    const bhavas = [];
+    for (let house = 1; house <= 12; house += 1) {
+        const madhya = normalizeDegrees(ascendantLongitude + (house - 1) * 30);
+        const arambha = normalizeDegrees(madhya - 15);
+        const antya = normalizeDegrees(madhya + 15);
+        bhavas.push({
+            house,
+            arambha: arambha,
+            madhya: madhya,
+            antya: antya
+        });
+    }
+    return bhavas;
+};
+
 exports.getBirthChart = onCall({ cors: true }, (request) => {
     const data = request.data;
 
@@ -497,16 +766,29 @@ exports.getBirthChart = onCall({ cors: true }, (request) => {
             { name: "Saturn", id: SEI_SATURN }
         ];
 
+        const planetaryPositions = [];
         planetConfigs.forEach((p) => {
             const lon = getPlanetLongitude(p.id, jd);
             const sLong = normalizeDegrees(lon - ayanamsha);
             const sign = getSign(sLong);
             const deg = getDegInSign(sLong);
             const house = ((sign - ascSign + 12) % 12) + 1;
+            const nakshatra = getNakshatraDetails(sLong);
+            const status = getPlanetStatus(p.name, sign);
 
             charts.D1[p.name] = { sign, house, degrees: deg };
             charts.D9[p.name] = { sign: getNavamshaSign(sign, deg) };
             charts.D10[p.name] = { sign: getDashamshaSign(sign, deg) };
+
+            const formatted = `${p.name} ${SIGN_NAMES[sign - 1]} ${formatDms(deg)} (Nakshatra ${nakshatra.name} Pada ${nakshatra.pada}) ${status}`;
+            planetaryPositions.push({
+                planet: p.name,
+                sign: SIGN_NAMES[sign - 1],
+                degrees: formatDms(deg),
+                nakshatra: `${nakshatra.name}-${nakshatra.pada}`,
+                status,
+                formatted
+            });
         });
 
         const rahuTropical = normalizeDegrees(meanNodeLongitude(jd) * (180 / Math.PI));
@@ -522,6 +804,38 @@ exports.getBirthChart = onCall({ cors: true }, (request) => {
         charts.D9.Rahu = { sign: getNavamshaSign(rSign, getDegInSign(rahuSidereal)) };
         charts.D9.Ketu = { sign: getNavamshaSign(kSign, getDegInSign(ketuSidereal)) };
 
+        const rahuNakshatra = getNakshatraDetails(rahuSidereal);
+        const ketuNakshatra = getNakshatraDetails(ketuSidereal);
+        planetaryPositions.push({
+            planet: "Rahu",
+            sign: SIGN_NAMES[rSign - 1],
+            degrees: formatDms(getDegInSign(rahuSidereal)),
+            nakshatra: `${rahuNakshatra.name}-${rahuNakshatra.pada}`,
+            status: "Shadow",
+            formatted: `Rahu ${SIGN_NAMES[rSign - 1]} ${formatDms(getDegInSign(rahuSidereal))} (Nakshatra ${rahuNakshatra.name} Pada ${rahuNakshatra.pada}) Shadow`
+        });
+        planetaryPositions.push({
+            planet: "Ketu",
+            sign: SIGN_NAMES[kSign - 1],
+            degrees: formatDms(getDegInSign(ketuSidereal)),
+            nakshatra: `${ketuNakshatra.name}-${ketuNakshatra.pada}`,
+            status: "Shadow",
+            formatted: `Ketu ${SIGN_NAMES[kSign - 1]} ${formatDms(getDegInSign(ketuSidereal))} (Nakshatra ${ketuNakshatra.name} Pada ${ketuNakshatra.pada}) Shadow`
+        });
+
+        const moonLongitude = normalizeDegrees(getPlanetLongitude(SEI_MOON, jd) - ayanamsha);
+        const sunLongitude = normalizeDegrees(getPlanetLongitude(SEI_SUN, jd) - ayanamsha);
+        const moonNakshatra = getNakshatraDetails(moonLongitude);
+        const vimshottariDasha = buildVimshottariDasha(moonLongitude);
+
+        const birthParticulars = {
+            vikram_samvat: `Vikram Samvat ${getVikramSamvatYear(jsDate)}`,
+            tithi: getTithi(moonLongitude, sunLongitude),
+            nakshatra: `${moonNakshatra.name} Nakshatra`
+        };
+
+        const avakhada = AVAKHADA_MAP[moonNakshatra.index];
+
         return {
             status: "success",
             metadata: {
@@ -529,6 +843,14 @@ exports.getBirthChart = onCall({ cors: true }, (request) => {
                 ascendant_degrees: siderealAsc,
                 ayanamsha_used: ayanamsha
             },
+            birth_particulars: birthParticulars,
+            avakhada_chakra: avakhada,
+            planetary_positions: planetaryPositions,
+            vimshottari_dasha_at_birth: {
+                current: vimshottariDasha.current,
+                balance: `${vimshottariDasha.balance.years}y ${vimshottariDasha.balance.months}m ${vimshottariDasha.balance.days}d`
+            },
+            bhava_sripati: buildSripatiBhava(siderealAsc),
             charts
         };
     } catch (err) {
