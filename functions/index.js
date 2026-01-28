@@ -3,7 +3,7 @@
  */
 
 import {createRequire} from "node:module";
-import {readdirSync, readFileSync} from "node:fs";
+import {readdirSync} from "node:fs";
 import {dirname, join} from "node:path";
 import * as SwissEphModule from "@fusionstrings/swiss-eph";
 import {setGlobalOptions} from "firebase-functions";
@@ -43,15 +43,8 @@ const resolveSwissEphInitOptions = () => {
     return null;
   }
 
-  const wasmFile = readdirSync(moduleDir).find((file) => file.endsWith(".wasm"));
-  if (!wasmFile) {
-    return null;
-  }
-
-  const wasmPath = join(moduleDir, wasmFile);
   return {
     locateFile: (file) => join(moduleDir, file),
-    wasmBinary: readFileSync(wasmPath),
   };
 };
 
