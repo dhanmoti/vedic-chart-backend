@@ -16,7 +16,7 @@
   "dependencies": {
     "firebase-admin": "^13.6.0",
     "firebase-functions": "^7.0.0",
-    "swisseph-wasm": "*"
+    "ephemeris": "*"
   },
   "devDependencies": {
     "eslint": "^8.15.0",
