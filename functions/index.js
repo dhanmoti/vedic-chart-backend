@@ -1,190 +1,117 @@
-/**
- * Licensed under the GNU AGPL v3.
- *
- * Import function triggers from their respective submodules:
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+const { setGlobalOptions } = require("firebase-functions");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const Astronomy = require("astronomy-engine");
 
-const fs = require("fs");
-const path = require("path");
-const {setGlobalOptions} = require("firebase-functions");
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
-const sweph = require("ephemeris");
+setGlobalOptions({ maxInstances: 10 });
 
-// For cost control, you can set the maximum number of containers.
-// Fixed spacing: removed internal spaces to satisfy object-curly-spacing
-setGlobalOptions({maxInstances: 10});
+/** VEDIC LOGIC HELPERS */
+const normalizeDegrees = (d) => ((d % 360) + 360) % 360;
+const getSign = (d) => Math.floor(normalizeDegrees(d) / 30) + 1;
+const getDegInSign = (d) => normalizeDegrees(d) % 30;
 
-const requiredFields = ["dob", "time", "lat", "lng", "timezone"];
-
-const EPHE_PATH = path.join(
-    path.dirname(require.resolve("ephemeris")),
-    "ephe",
-);
-
-if (fs.existsSync(EPHE_PATH)) {
-  sweph.swe_set_ephe_path(EPHE_PATH);
-}
-
-sweph.swe_set_sid_mode(sweph.SE_SIDM_LAHIRI, 0, 0);
-
-const PLANETS = {
-  Sun: sweph.SE_SUN,
-  Moon: sweph.SE_MOON,
-  Mars: sweph.SE_MARS,
-  Mercury: sweph.SE_MERCURY,
-  Jupiter: sweph.SE_JUPITER,
-  Venus: sweph.SE_VENUS,
-  Saturn: sweph.SE_SATURN,
-  Rahu: sweph.SE_MEAN_NODE,
+const getAyanamsha = (year) => {
+    return 23.85 + (year - 2000) * (50.27 / 3600);
 };
 
-const SIDEREAL_FLAGS = sweph.SEFLG_SWIEPH | sweph.SEFLG_SIDEREAL;
-
-const normalizeDegrees = (degrees) => ((degrees % 360) + 360) % 360;
-
-const getSignFromDegrees = (degrees) => Math.floor(normalizeDegrees(degrees) / 30) + 1;
-
-const getDegreeInSign = (degrees) => normalizeDegrees(degrees) % 30;
-
-const getNavamshaSign = (sign, degreesInSign) => {
-  const division = Math.floor(degreesInSign / (30 / 9));
-  let startSign = 1;
-  if ([2, 5, 8, 11].includes(sign)) {
-    startSign = 10;
-  } else if ([3, 6, 9, 12].includes(sign)) {
-    startSign = 7;
-  }
-  return ((startSign - 1 + division) % 12) + 1;
+// Standard Mean Node formula (Meeus/Moshier) - Very stable
+const getMeanRahu = (astroTime) => {
+    const T = astroTime.tt / 36525.0; // Centuries from J2000
+    // Formula for Mean Ascending Node of the Moon
+    let omega = 125.0445222 - (1934.1362608 * T) + (0.0020708 * T * T) + (T * T * T / 450000);
+    return normalizeDegrees(omega);
 };
 
-const getDashamshaSign = (sign, degreesInSign) => {
-  const division = Math.floor(degreesInSign / 3);
-  const isOddSign = sign % 2 === 1;
-  const startSign = isOddSign ? sign : ((sign + 7) % 12) + 1;
-  return ((startSign - 1 + division) % 12) + 1;
+const getNavamshaSign = (sign, deg) => {
+    const div = Math.floor(deg / (30 / 9));
+    let start = 1;
+    if ([2, 5, 8, 11].includes(sign)) start = 10;
+    else if ([3, 6, 9, 12].includes(sign)) start = 7;
+    return ((start - 1 + div) % 12) + 1;
 };
 
-const toUtcDate = (dob, time, timezone) => {
-  const [year, month, day] = dob.split("-").map(Number);
-  const [hour, minute = 0, second = 0] = time.split(":").map(Number);
-  let offsetMinutes = 0;
+const getDashamshaSign = (sign, deg) => {
+    const div = Math.floor(deg / 3);
+    const start = (sign % 2 === 1) ? sign : ((sign + 8) % 12) + 1;
+    return ((start - 1 + div) % 12) + 1;
+};
 
-  if (typeof timezone === "number") {
-    offsetMinutes = Math.round(timezone * 60);
-  } else if (typeof timezone === "string") {
-    const match = timezone.match(/^([+-])(\d{1,2})(?::?(\d{2}))?$/);
-    if (match) {
-      const sign = match[1] === "-" ? -1 : 1;
-      const hours = Number(match[2]);
-      const minutes = Number(match[3] || "0");
-      offsetMinutes = sign * (hours * 60 + minutes);
+exports.getBirthChart = onCall({ cors: true }, (request) => {
+    const data = request.data;
+    
+    try {
+        if (!data.dob || !data.time) throw new Error("Missing birth details");
+        
+        const [y, m, d] = data.dob.split("-").map(Number);
+        const [hh, mm] = data.time.split(":").map(Number);
+        const jsDate = new Date(Date.UTC(y, m - 1, d, hh, mm));
+
+        const astroTime = Astronomy.MakeTime(jsDate);
+        const ayanamsha = getAyanamsha(y);
+        const lng = parseFloat(data.lng || 0);
+
+        // 1. Calculate Sidereal Ascendant
+        const lst = Astronomy.SiderealTime(astroTime);
+        const tropicalAsc = normalizeDegrees(lst * 15 + lng);
+        const siderealAsc = normalizeDegrees(tropicalAsc - ayanamsha);
+        const ascSign = getSign(siderealAsc);
+
+        const charts = { D1: {}, D9: {}, D10: {} };
+
+        // 2. Main Planets
+        const planetConfigs = [
+            { name: "Sun", body: Astronomy.Body.Sun },
+            { name: "Moon", body: Astronomy.Body.Moon },
+            { name: "Mercury", body: Astronomy.Body.Mercury },
+            { name: "Venus", body: Astronomy.Body.Venus },
+            { name: "Mars", body: Astronomy.Body.Mars },
+            { name: "Jupiter", body: Astronomy.Body.Jupiter },
+            { name: "Saturn", body: Astronomy.Body.Saturn }
+        ];
+
+        planetConfigs.forEach(p => {
+            let lon;
+            if (p.name === "Sun") {
+                lon = Astronomy.SunPosition(astroTime).elon;
+            } else {
+                lon = Astronomy.EclipticLongitude(p.body, astroTime);
+            }
+
+            const sLong = normalizeDegrees(lon - ayanamsha);
+            const sign = getSign(sLong);
+            const deg = getDegInSign(sLong);
+            const house = ((sign - ascSign + 12) % 12) + 1;
+
+            charts.D1[p.name] = { sign, house, degrees: deg };
+            charts.D9[p.name] = { sign: getNavamshaSign(sign, deg) };
+            charts.D10[p.name] = { sign: getDashamshaSign(sign, deg) };
+        });
+
+        // 3. Rahu & Ketu (Calculated via Mean Node Formula)
+        const rahuTropical = getMeanRahu(astroTime);
+        const rahuSidereal = normalizeDegrees(rahuTropical - ayanamsha);
+        const ketuSidereal = normalizeDegrees(rahuSidereal + 180);
+
+        const rSign = getSign(rahuSidereal);
+        const kSign = getSign(ketuSidereal);
+
+        charts.D1.Rahu = { sign: rSign, house: ((rSign - ascSign + 12) % 12) + 1, degrees: getDegInSign(rahuSidereal) };
+        charts.D1.Ketu = { sign: kSign, house: ((kSign - ascSign + 12) % 12) + 1, degrees: getDegInSign(ketuSidereal) };
+        
+        charts.D9.Rahu = { sign: getNavamshaSign(rSign, getDegInSign(rahuSidereal)) };
+        charts.D9.Ketu = { sign: getNavamshaSign(kSign, getDegInSign(ketuSidereal)) };
+
+        return {
+            status: "success",
+            metadata: {
+                ascendant_sign: ascSign,
+                ascendant_degrees: siderealAsc,
+                ayanamsha_used: ayanamsha
+            },
+            charts
+        };
+
+    } catch (err) {
+        console.error("Astro Engine Error:", err);
+        throw new HttpsError("internal", `Calculation failed: ${err.message}`);
     }
-  }
-
-  const localMillis = Date.UTC(year, month - 1, day, hour, minute, second);
-  return new Date(localMillis - offsetMinutes * 60 * 1000);
-};
-
-const getJulianDay = (utcDate) => {
-  const hour =
-    utcDate.getUTCHours() +
-    utcDate.getUTCMinutes() / 60 +
-    utcDate.getUTCSeconds() / 3600 +
-    utcDate.getUTCMilliseconds() / 3600000;
-
-  return sweph.swe_julday(
-      utcDate.getUTCFullYear(),
-      utcDate.getUTCMonth() + 1,
-      utcDate.getUTCDate(),
-      hour,
-      sweph.SE_GREG_CAL,
-  );
-};
-
-const calculatePlanetLongitude = (julianDay, planetId) => {
-  const result = sweph.swe_calc_ut(julianDay, planetId, SIDEREAL_FLAGS);
-  if (result.error || result.serr) {
-    throw new Error(result.error || result.serr);
-  }
-  return result.data[0];
-};
-
-const calculateAscendant = (julianDay, lat, lng) => {
-  const result = sweph.swe_houses_ex(
-      julianDay,
-      SIDEREAL_FLAGS,
-      lat,
-      lng,
-      "W",
-  );
-  if (result.error || result.serr) {
-    throw new Error(result.error || result.serr);
-  }
-  return result.ascmc[0];
-};
-
-const buildChart = (julianDay, lat, lng) => {
-  const ascendant = calculateAscendant(julianDay, lat, lng);
-  const ascendantSign = getSignFromDegrees(ascendant);
-
-  const charts = {
-    D1: {},
-    D9: {},
-    D10: {},
-  };
-
-  Object.entries(PLANETS).forEach(([name, planetId]) => {
-    const longitude = calculatePlanetLongitude(julianDay, planetId);
-    const sign = getSignFromDegrees(longitude);
-    const degreesInSign = getDegreeInSign(longitude);
-    const house = ((sign - ascendantSign + 12) % 12) + 1;
-
-    charts.D1[name] = {sign, house};
-    charts.D9[name] = {sign: getNavamshaSign(sign, degreesInSign)};
-    charts.D10[name] = {sign: getDashamshaSign(sign, degreesInSign)};
-  });
-
-  const ketuLongitude = normalizeDegrees(
-      calculatePlanetLongitude(julianDay, sweph.SE_MEAN_NODE) + 180,
-  );
-  const ketuSign = getSignFromDegrees(ketuLongitude);
-  const ketuDegreesInSign = getDegreeInSign(ketuLongitude);
-  const ketuHouse = ((ketuSign - ascendantSign + 12) % 12) + 1;
-
-  charts.D1.Ketu = {sign: ketuSign, house: ketuHouse};
-  charts.D9.Ketu = {sign: getNavamshaSign(ketuSign, ketuDegreesInSign)};
-  charts.D10.Ketu = {sign: getDashamshaSign(ketuSign, ketuDegreesInSign)};
-
-  return {
-    status: "success",
-    metadata: {
-      ascendant_sign: ascendantSign,
-      ascendant_degrees: normalizeDegrees(ascendant),
-    },
-    charts,
-  };
-};
-
-exports.getBirthChart = onCall({cors: true}, (request) => {
-  const missingFields = requiredFields.filter(
-      (field) => request.data?.[field] === undefined,
-  );
-
-  if (missingFields.length) {
-    throw new HttpsError(
-        "invalid-argument",
-        `Missing required fields: ${missingFields.join(", ")}`,
-    );
-  }
-
-  const utcDate = toUtcDate(
-      request.data.dob,
-      request.data.time,
-      request.data.timezone,
-  );
-  const julianDay = getJulianDay(utcDate);
-
-  return buildChart(julianDay, request.data.lat, request.data.lng);
 });
