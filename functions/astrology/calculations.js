@@ -77,7 +77,11 @@ const formatDms = (deg) => {
   const degrees = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  return `${degrees}°${minutes.toString().padStart(2, "0")}'${seconds.toString().padStart(2, "0")}"`;
+  return [
+    `${degrees}°`,
+    `${minutes.toString().padStart(2, "0")}'`,
+    `${seconds.toString().padStart(2, "0")}"`,
+  ].join("");
 };
 
 const getTithi = (moonLongitude, sunLongitude) => {
@@ -174,7 +178,9 @@ const buildSripatiBhava = (ascendantLongitude) => {
 };
 
 const getNodesSidereal = (jd, ayanamsha) => {
-  const rahuTropical = normalizeDegrees(meanNodeLongitude(jd) * (180 / Math.PI));
+  const rahuTropical = normalizeDegrees(
+    meanNodeLongitude(jd) * (180 / Math.PI)
+  );
   const rahuSidereal = normalizeDegrees(rahuTropical - ayanamsha);
   const ketuSidereal = normalizeDegrees(rahuSidereal + 180);
   return {rahuSidereal, ketuSidereal};

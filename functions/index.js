@@ -88,7 +88,11 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
       charts.D9[planet.name] = {sign: getNavamshaSign(sign, deg)};
       charts.D10[planet.name] = {sign: getDashamshaSign(sign, deg)};
 
-      const formatted = `${planet.name} ${SIGN_NAMES[sign - 1]} ${formatDms(deg)} (Nakshatra ${nakshatra.name} Pada ${nakshatra.pada}) ${status}`;
+      const formatted = [
+        `${planet.name} ${SIGN_NAMES[sign - 1]} ${formatDms(deg)}`,
+        `(Nakshatra ${nakshatra.name} Pada ${nakshatra.pada})`,
+        status,
+      ].join(" ");
       planetaryPositions.push({
         planet: planet.name,
         sign: SIGN_NAMES[sign - 1],
@@ -104,11 +108,23 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
     const rSign = getSign(rahuSidereal);
     const kSign = getSign(ketuSidereal);
 
-    charts.D1.Rahu = {sign: rSign, house: ((rSign - ascSign + 12) % 12) + 1, degrees: getDegInSign(rahuSidereal)};
-    charts.D1.Ketu = {sign: kSign, house: ((kSign - ascSign + 12) % 12) + 1, degrees: getDegInSign(ketuSidereal)};
+    charts.D1.Rahu = {
+      sign: rSign,
+      house: ((rSign - ascSign + 12) % 12) + 1,
+      degrees: getDegInSign(rahuSidereal),
+    };
+    charts.D1.Ketu = {
+      sign: kSign,
+      house: ((kSign - ascSign + 12) % 12) + 1,
+      degrees: getDegInSign(ketuSidereal),
+    };
 
-    charts.D9.Rahu = {sign: getNavamshaSign(rSign, getDegInSign(rahuSidereal))};
-    charts.D9.Ketu = {sign: getNavamshaSign(kSign, getDegInSign(ketuSidereal))};
+    charts.D9.Rahu = {
+      sign: getNavamshaSign(rSign, getDegInSign(rahuSidereal)),
+    };
+    charts.D9.Ketu = {
+      sign: getNavamshaSign(kSign, getDegInSign(ketuSidereal)),
+    };
 
     const rahuNakshatra = getNakshatraDetails(rahuSidereal);
     const ketuNakshatra = getNakshatraDetails(ketuSidereal);
@@ -118,7 +134,12 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
       degrees: formatDms(getDegInSign(rahuSidereal)),
       nakshatra: `${rahuNakshatra.name}-${rahuNakshatra.pada}`,
       status: "Shadow",
-      formatted: `Rahu ${SIGN_NAMES[rSign - 1]} ${formatDms(getDegInSign(rahuSidereal))} (Nakshatra ${rahuNakshatra.name} Pada ${rahuNakshatra.pada}) Shadow`,
+      formatted: [
+        `Rahu ${SIGN_NAMES[rSign - 1]}`,
+        formatDms(getDegInSign(rahuSidereal)),
+        `(Nakshatra ${rahuNakshatra.name} Pada ${rahuNakshatra.pada})`,
+        "Shadow",
+      ].join(" "),
     });
     planetaryPositions.push({
       planet: "Ketu",
@@ -126,11 +147,20 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
       degrees: formatDms(getDegInSign(ketuSidereal)),
       nakshatra: `${ketuNakshatra.name}-${ketuNakshatra.pada}`,
       status: "Shadow",
-      formatted: `Ketu ${SIGN_NAMES[kSign - 1]} ${formatDms(getDegInSign(ketuSidereal))} (Nakshatra ${ketuNakshatra.name} Pada ${ketuNakshatra.pada}) Shadow`,
+      formatted: [
+        `Ketu ${SIGN_NAMES[kSign - 1]}`,
+        formatDms(getDegInSign(ketuSidereal)),
+        `(Nakshatra ${ketuNakshatra.name} Pada ${ketuNakshatra.pada})`,
+        "Shadow",
+      ].join(" "),
     });
 
-    const moonLongitude = normalizeDegrees(getPlanetLongitude(SEI_MOON, jd, ephemerisCache) - ayanamsha);
-    const sunLongitude = normalizeDegrees(getPlanetLongitude(SEI_SUN, jd, ephemerisCache) - ayanamsha);
+    const moonLongitude = normalizeDegrees(
+      getPlanetLongitude(SEI_MOON, jd, ephemerisCache) - ayanamsha
+    );
+    const sunLongitude = normalizeDegrees(
+      getPlanetLongitude(SEI_SUN, jd, ephemerisCache) - ayanamsha
+    );
     const moonNakshatra = getNakshatraDetails(moonLongitude);
     const vimshottariDasha = buildVimshottariDasha(moonLongitude);
 
@@ -154,7 +184,9 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
       planetary_positions: planetaryPositions,
       vimshottari_dasha_at_birth: {
         current: vimshottariDasha.current,
-        balance: `${vimshottariDasha.balance.years}y ${vimshottariDasha.balance.months}m ${vimshottariDasha.balance.days}d`,
+        balance: `${vimshottariDasha.balance.years}y `
+          + `${vimshottariDasha.balance.months}m `
+          + `${vimshottariDasha.balance.days}d`,
       },
       bhava_sripati: buildSripatiBhava(siderealAsc),
       charts,
