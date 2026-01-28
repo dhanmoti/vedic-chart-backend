@@ -21,16 +21,25 @@ const PLANETS = {
   Rahu: ["SE_MEAN_NODE", "MEAN_NODE"],
 };
 
-const getSwissEph = () => {
+const resolveMaybePromise = async (value) =>
+  value && typeof value.then === "function" ? value : Promise.resolve(value);
+
+const getSwissEph = async () => {
   const module = SwissEphModule.default ?? SwissEphModule;
   if (typeof module === "function") {
-    return module();
+    return resolveMaybePromise(module());
   }
   if (typeof module?.createSwissEph === "function") {
-    return module.createSwissEph();
+    return resolveMaybePromise(module.createSwissEph());
   }
   if (typeof module?.SwissEph === "function") {
     return new module.SwissEph();
+  }
+  if (typeof module?.init === "function") {
+    return resolveMaybePromise(module.init());
+  }
+  if (typeof module?.initialize === "function") {
+    return resolveMaybePromise(module.initialize());
   }
   return module;
 };
@@ -224,8 +233,8 @@ const calcAscendantLongitude = (swe, julianDayUt, lat, lng) => {
   throw new Error("SwissEph houses result missing ascendant");
 };
 
-const calculateCharts = ({dob, time, lat, lng, timezone}) => {
-  const swe = getSwissEph();
+const calculateCharts = async ({dob, time, lat, lng, timezone}) => {
+  const swe = await getSwissEph();
   setSiderealMode(swe);
 
   const dateParts = parseDateTime(dob, time);
@@ -274,7 +283,7 @@ const calculateCharts = ({dob, time, lat, lng, timezone}) => {
   };
 };
 
-export const getBirthChart = onCall({cors: true}, (request) => {
+export const getBirthChart = onCall({cors: true}, async (request) => {
   const missingFields = REQUIRED_FIELDS.filter(
     (field) => request.data?.[field] === undefined,
   );
@@ -294,7 +303,7 @@ export const getBirthChart = onCall({cors: true}, (request) => {
   }
 
   try {
-    return calculateCharts({
+    return await calculateCharts({
       dob: request.data.dob,
       time: request.data.time,
       lat,
