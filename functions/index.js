@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const {setGlobalOptions} = require("firebase-functions");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
-const sweph = require("swisseph");
+const sweph = require("swisseph-v2");
 
 // For cost control, you can set the maximum number of containers.
 // Fixed spacing: removed internal spaces to satisfy object-curly-spacing
@@ -19,7 +19,7 @@ setGlobalOptions({maxInstances: 10});
 const requiredFields = ["dob", "time", "lat", "lng", "timezone"];
 
 const EPHE_PATH = path.join(
-    path.dirname(require.resolve("swisseph")),
+    path.dirname(require.resolve("swisseph-v2")),
     "ephe",
 );
 
