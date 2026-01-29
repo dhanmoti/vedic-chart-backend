@@ -1,5 +1,7 @@
 const {setGlobalOptions} = require("firebase-functions");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {spawnSync} = require("node:child_process");
+const path = require("node:path");
 const {
   SwissEphemerisFile,
   SEI_SUN,
@@ -43,6 +45,11 @@ const ephemerisCache = {
 };
 
 const {AVAKHADA_MAP} = compatibility;
+const PYJHORA_SCRIPT = path.join(
+    __dirname,
+    "pyjhora",
+    "get_birth_chart_detail.py",
+);
 
 exports.getBirthChart = onCall({cors: true}, (request) => {
   const data = request.data;
@@ -194,5 +201,49 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
   } catch (err) {
     console.error("Ephemeris Error:", err);
     throw new HttpsError("internal", `Calculation failed: ${err.message}`);
+  }
+});
+
+exports.getBirthChartdetail = onCall({cors: true}, (request) => {
+  const data = request.data;
+
+  try {
+    if (!data.dob || !data.time || data.lat === undefined || data.lng === undefined || data.tz === undefined) {
+      throw new Error("Missing required birth or location details");
+    }
+
+    const payload = {
+      dob: data.dob,
+      time: data.time,
+      lat: data.lat,
+      lng: data.lng,
+      tz: data.tz,
+      language: data.language || "en",
+    };
+
+    const result = spawnSync("python3", [PYJHORA_SCRIPT], {
+      input: JSON.stringify(payload),
+      encoding: "utf8",
+    });
+
+    if (result.error) {
+      throw new Error(`PyJHora execution failed: ${result.error.message}`);
+    }
+
+    const rawOutput = result.stdout ? result.stdout.trim() : "";
+    
+    // Safety check: Find the first '{' to ignore any leading debug text
+    const jsonStart = rawOutput.indexOf('{');
+    if (jsonStart === -1) {
+      const errorDetail = result.stderr || rawOutput || "No output from script";
+      throw new Error(`Invalid response from Python: ${errorDetail}`);
+    }
+
+    const cleanJson = rawOutput.substring(jsonStart);
+    return JSON.parse(cleanJson);
+
+  } catch (err) {
+    console.error("PyJHora Wrapper Error:", err);
+    throw new HttpsError("internal", err.message);
   }
 });
