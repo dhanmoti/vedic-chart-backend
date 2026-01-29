@@ -156,10 +156,10 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
     });
 
     const moonLongitude = normalizeDegrees(
-      getPlanetLongitude(SEI_MOON, jd, ephemerisCache) - ayanamsha
+        getPlanetLongitude(SEI_MOON, jd, ephemerisCache) - ayanamsha,
     );
     const sunLongitude = normalizeDegrees(
-      getPlanetLongitude(SEI_SUN, jd, ephemerisCache) - ayanamsha
+        getPlanetLongitude(SEI_SUN, jd, ephemerisCache) - ayanamsha,
     );
     const moonNakshatra = getNakshatraDetails(moonLongitude);
     const vimshottariDasha = buildVimshottariDasha(moonLongitude);
@@ -184,9 +184,9 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
       planetary_positions: planetaryPositions,
       vimshottari_dasha_at_birth: {
         current: vimshottariDasha.current,
-        balance: `${vimshottariDasha.balance.years}y `
-          + `${vimshottariDasha.balance.months}m `
-          + `${vimshottariDasha.balance.days}d`,
+        balance: `${vimshottariDasha.balance.years}y ` +
+          `${vimshottariDasha.balance.months}m ` +
+          `${vimshottariDasha.balance.days}d`,
       },
       bhava_sripati: buildSripatiBhava(siderealAsc),
       charts,
