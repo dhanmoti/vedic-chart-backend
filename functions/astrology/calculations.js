@@ -1,14 +1,5 @@
-const {
-  SEI_FLG_HELIO,
-  SEI_SUN,
-  SEI_MOON,
-} = require("../ephemeris/SwissEphemerisFile");
 const {zodiac, dasha, tithi} = require("./constants");
-const {
-  normalizeDegrees,
-  meanNodeLongitude,
-  toEclipticLongitude,
-} = require("./math");
+const {normalizeDegrees} = require("./math");
 
 const {SIGN_NAMES, NAKSHATRA_NAMES, DIGNITY_TABLE} = zodiac;
 const {DASA_LORDS, DASA_YEARS} = dasha;
@@ -17,30 +8,6 @@ const {TITHI_NAMES} = tithi;
 const getSign = (degrees) => Math.floor(normalizeDegrees(degrees) / 30) + 1;
 const getDegInSign = (degrees) => normalizeDegrees(degrees) % 30;
 
-const getLahiriAyanamsha = (jd) => {
-  const T = (jd - 2415020.0) / 36525.0;
-  return 22.460148 + 1.396042 * T + 0.000308 * T * T;
-};
-
-const getPlanetLongitude = (ipli, jd, ephemerisCache) => {
-  const planetFile = ephemerisCache.planet;
-  const moonFile = ephemerisCache.moon;
-  if (ipli === SEI_MOON) {
-    const moonVec = moonFile.evaluate(SEI_MOON, jd);
-    return toEclipticLongitude(moonVec, jd);
-  }
-  const earthVec = planetFile.evaluate(SEI_SUN, jd);
-  if (ipli === SEI_SUN) {
-    return toEclipticLongitude(earthVec.map((v) => -v), jd);
-  }
-  const planetVec = planetFile.evaluate(ipli, jd);
-  const iflg = planetFile.getIfFlags(ipli);
-  if (iflg & SEI_FLG_HELIO) {
-    const geoVec = planetVec.map((v, i) => v - earthVec[i]);
-    return toEclipticLongitude(geoVec, jd);
-  }
-  return toEclipticLongitude(planetVec, jd);
-};
 
 const getNavamshaSign = (sign, deg) => {
   const div = Math.floor(deg / (30 / 9));
@@ -177,21 +144,10 @@ const buildSripatiBhava = (ascendantLongitude) => {
   return bhavas;
 };
 
-const getNodesSidereal = (jd, ayanamsha) => {
-  const rahuTropical = normalizeDegrees(
-      meanNodeLongitude(jd) * (180 / Math.PI),
-  );
-  const rahuSidereal = normalizeDegrees(rahuTropical - ayanamsha);
-  const ketuSidereal = normalizeDegrees(rahuSidereal + 180);
-  return {rahuSidereal, ketuSidereal};
-};
-
 module.exports = {
   SIGN_NAMES,
   getSign,
   getDegInSign,
-  getLahiriAyanamsha,
-  getPlanetLongitude,
   getNavamshaSign,
   getDashamshaSign,
   getNakshatraDetails,
@@ -201,5 +157,4 @@ module.exports = {
   getPlanetStatus,
   buildVimshottariDasha,
   buildSripatiBhava,
-  getNodesSidereal,
 };
