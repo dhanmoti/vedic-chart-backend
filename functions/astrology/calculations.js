@@ -179,7 +179,7 @@ const buildSripatiBhava = (ascendantLongitude) => {
 
 const getNodesSidereal = (jd, ayanamsha) => {
   const rahuTropical = normalizeDegrees(
-    meanNodeLongitude(jd) * (180 / Math.PI)
+      meanNodeLongitude(jd) * (180 / Math.PI),
   );
   const rahuSidereal = normalizeDegrees(rahuTropical - ayanamsha);
   const ketuSidereal = normalizeDegrees(rahuSidereal + 180);
