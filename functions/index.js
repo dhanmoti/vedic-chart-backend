@@ -208,14 +208,8 @@ exports.getBirthChartdetail = onCall({cors: true}, (request) => {
   const data = request.data;
 
   try {
-    if (!data.dob || !data.time) {
-      throw new Error("Missing birth details");
-    }
-
-    if (data.lat === undefined ||
-        data.lng === undefined ||
-        data.tz === undefined) {
-      throw new Error("Missing location details (lat, lng, tz)");
+    if (!data.dob || !data.time || data.lat === undefined || data.lng === undefined || data.tz === undefined) {
+      throw new Error("Missing required birth or location details");
     }
 
     const payload = {
@@ -236,17 +230,20 @@ exports.getBirthChartdetail = onCall({cors: true}, (request) => {
       throw new Error(`PyJHora execution failed: ${result.error.message}`);
     }
 
-    if (result.status !== 0) {
-      const stderr = result.stderr ? result.stderr.trim() : "Unknown error";
-      throw new Error(`PyJHora error: ${stderr}`);
+    const rawOutput = result.stdout ? result.stdout.trim() : "";
+    
+    // Safety check: Find the first '{' to ignore any leading debug text
+    const jsonStart = rawOutput.indexOf('{');
+    if (jsonStart === -1) {
+      const errorDetail = result.stderr || rawOutput || "No output from script";
+      throw new Error(`Invalid response from Python: ${errorDetail}`);
     }
 
-    const output = result.stdout ? result.stdout.trim() : "";
-    const parsed = output ? JSON.parse(output) : {};
+    const cleanJson = rawOutput.substring(jsonStart);
+    return JSON.parse(cleanJson);
 
-    return parsed;
   } catch (err) {
-    console.error("PyJHora Error:", err);
-    throw new HttpsError("internal", `PyJHora calculation failed: ${err.message}`);
+    console.error("PyJHora Wrapper Error:", err);
+    throw new HttpsError("internal", err.message);
   }
 });
