@@ -1,28 +1,12 @@
 const {setGlobalOptions} = require("firebase-functions");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
-const {
-  SwissEphemerisFile,
-  SEI_SUN,
-  SEI_MOON,
-  SEI_MERCURY,
-  SEI_VENUS,
-  SEI_MARS,
-  SEI_JUPITER,
-  SEI_SATURN,
-  EPHEMERIS_FILES,
-} = require("./ephemeris/SwissEphemerisFile");
 const {compatibility} = require("./astrology/constants");
-const {
-  normalizeDegrees,
-  toJulianDay,
-  greenwichSiderealTime,
-} = require("./astrology/math");
+const {normalizeDegrees} = require("./astrology/math");
+const {getSwissPositions, PLANET_CONFIGS} = require("./astrology/swissEphemeris");
 const {
   SIGN_NAMES,
   getSign,
   getDegInSign,
-  getLahiriAyanamsha,
-  getPlanetLongitude,
   getNavamshaSign,
   getDashamshaSign,
   getNakshatraDetails,
@@ -32,19 +16,13 @@ const {
   getPlanetStatus,
   buildVimshottariDasha,
   buildSripatiBhava,
-  getNodesSidereal,
 } = require("./astrology/calculations");
 
 setGlobalOptions({maxInstances: 10});
 
-const ephemerisCache = {
-  planet: new SwissEphemerisFile(EPHEMERIS_FILES.planet),
-  moon: new SwissEphemerisFile(EPHEMERIS_FILES.moon),
-};
-
 const {AVAKHADA_MAP} = compatibility;
 
-exports.getBirthChart = onCall({cors: true}, (request) => {
+exports.getBirthChart = onCall({cors: true}, async (request) => {
   const data = request.data;
 
   try {
@@ -53,31 +31,21 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
     const [y, m, d] = data.dob.split("-").map(Number);
     const [hh, mm] = data.time.split(":").map(Number);
     const jsDate = new Date(Date.UTC(y, m - 1, d, hh, mm));
-    const jd = toJulianDay(jsDate);
-    const ayanamsha = getLahiriAyanamsha(jd);
+    const lat = parseFloat(data.lat || 0);
     const lng = parseFloat(data.lng || 0);
-
-    const lst = greenwichSiderealTime(jd);
-    const tropicalAsc = normalizeDegrees(lst + lng);
-    const siderealAsc = normalizeDegrees(tropicalAsc - ayanamsha);
+    const {jd, ayanamsha, ascendant, bodies} = await getSwissPositions({
+      date: jsDate,
+      lat,
+      lng,
+    });
+    const siderealAsc = normalizeDegrees(ascendant);
     const ascSign = getSign(siderealAsc);
 
     const charts = {D1: {}, D9: {}, D10: {}};
 
-    const planetConfigs = [
-      {name: "Sun", id: SEI_SUN},
-      {name: "Moon", id: SEI_MOON},
-      {name: "Mercury", id: SEI_MERCURY},
-      {name: "Venus", id: SEI_VENUS},
-      {name: "Mars", id: SEI_MARS},
-      {name: "Jupiter", id: SEI_JUPITER},
-      {name: "Saturn", id: SEI_SATURN},
-    ];
-
     const planetaryPositions = [];
-    planetConfigs.forEach((planet) => {
-      const lon = getPlanetLongitude(planet.id, jd, ephemerisCache);
-      const siderealLongitude = normalizeDegrees(lon - ayanamsha);
+    PLANET_CONFIGS.forEach((planet) => {
+      const siderealLongitude = bodies[planet.name];
       const sign = getSign(siderealLongitude);
       const deg = getDegInSign(siderealLongitude);
       const house = ((sign - ascSign + 12) % 12) + 1;
@@ -103,7 +71,8 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
       });
     });
 
-    const {rahuSidereal, ketuSidereal} = getNodesSidereal(jd, ayanamsha);
+    const rahuSidereal = bodies.Rahu;
+    const ketuSidereal = bodies.Ketu;
 
     const rSign = getSign(rahuSidereal);
     const kSign = getSign(ketuSidereal);
@@ -155,12 +124,8 @@ exports.getBirthChart = onCall({cors: true}, (request) => {
       ].join(" "),
     });
 
-    const moonLongitude = normalizeDegrees(
-        getPlanetLongitude(SEI_MOON, jd, ephemerisCache) - ayanamsha,
-    );
-    const sunLongitude = normalizeDegrees(
-        getPlanetLongitude(SEI_SUN, jd, ephemerisCache) - ayanamsha,
-    );
+    const moonLongitude = bodies.Moon;
+    const sunLongitude = bodies.Sun;
     const moonNakshatra = getNakshatraDetails(moonLongitude);
     const vimshottariDasha = buildVimshottariDasha(moonLongitude);
 
